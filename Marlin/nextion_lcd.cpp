@@ -1,5 +1,7 @@
 #include "nextion_lcd.h"
 #include "language.h"
+#include "Marlin.h"
+#include "temperature.h"
 
 #define CBLACK 0
 #define CRED 63488
@@ -18,6 +20,8 @@ bool _detected = false;
 uint16_t _messageColor = CBLACK;
 char lcd_status_message[MESSAGEWIDTH] = WELCOME_MSG;
 bool _statusChanged = false;
+uint8_t _page;
+char buf[32];
 
 #define LCD Serial1
 
@@ -62,6 +66,7 @@ void lcd_init(){
   sendCommand("");
   sendCommand("bkcmd=0");
   sendCommand("page 0");
+  _page=0;
   flushRead();
   sendCommand("get Loading.update.val");
   _detected = recvRetNumber(&n, 1000);
@@ -102,10 +107,21 @@ void flushRead(){
 
 #define IDLE    0
 #define CMD1    1
+#define CMD2    2
+#define CMD3    3
 
+#define SETARGETEXTRUDER    0x20
+#define SETTARGETBED        0x21
+#define SETFANSPEED         0x22
+#define SETSPINDLESPEED     0x23
+#define SETPAGE             0x10
+#define SETGCODE            0x30
+#define SETMCODE            0x40
 
 void processSerial(){
   uint8_t c;
+  static uint8_t cmd, cpt;
+  static uint32_t tmp;
   static uint8_t state = IDLE;
   if (LCD.available())
   {
@@ -113,7 +129,42 @@ void processSerial(){
     switch (state)
     {
       case IDLE :
-
+        if (c == 0x01) state = CMD1;
+      break;
+      case CMD1:
+        cmd = c;
+        cpt = 0;
+        tmp = 0;
+        state = CMD2;
+      break;
+      case CMD2:
+        switch(cmd)
+        {
+          case SETARGETEXTRUDER:
+            if (cpt < 3) {tmp += (uint32_t)c << (cpt*8); cpt++;}
+            else {setTargetHotend0(tmp); state = IDLE;}
+          break;
+          case SETTARGETBED:
+            if (cpt < 3) {tmp += (uint32_t)c << (cpt*8); cpt++;}
+            else {setTargetBed(tmp); state = IDLE;}
+          break;
+          case SETFANSPEED:
+            if (cpt < 3) {tmp += (uint32_t)c << (cpt*8); cpt++;}
+            else {fanSpeed = map(tmp, 0, 100, 0 , 255); state = IDLE;}
+          break;
+          case SETSPINDLESPEED:
+           if (cpt < 3) {tmp += (uint32_t)c << (cpt*8); cpt++;}
+           else {analogWrite(SPINDLE_PIN,map(tmp, 0, 100, 0 , 255)); state = IDLE; } 
+          break;
+          case SETPAGE:
+            _page = c;
+            state = IDLE;
+          break;
+          case SETGCODE:
+              if (c != 0x00) {buf[cpt++] = c;}
+              else {buf[cpt] = 0x00; enquecommand(buf); state = IDLE;}
+          break;
+        }
       break;
     }
   }
