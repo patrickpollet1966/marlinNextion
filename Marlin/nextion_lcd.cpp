@@ -11,6 +11,7 @@ void sendStr(const char* cmd, char* str);
 void flushRead();
 bool recvRetNumber(uint32_t *number, uint32_t timeout);
 uint16_t recvRetString(char *buffer, uint16_t len, uint32_t timeout);
+void processSerial(void);
 
 unsigned long next_lcd_update_ms;
 bool _detected = false;
@@ -41,12 +42,13 @@ bool _statusChanged = false;
 void lcd_update(){
  static int i = 0;
  if (_detected){
+   processSerial();
    if ( millis() > next_lcd_update_ms) { //time to send update to display 
     sendInt("Loading.update.val", i++);
 
     if (_statusChanged){
       _statusChanged = false;
-      SendStr("Loadind.statusMessage.txt", lcd_status_message);
+      sendStr("Loadind.statusMessage.txt", lcd_status_message);
     }
     
     next_lcd_update_ms = millis() + LCD_UPDATE_INTERVAL;
@@ -96,6 +98,25 @@ void flushRead(){
     {
         LCD.read();
     }
+}
+
+#define IDLE    0
+#define CMD1    1
+
+
+void processSerial(){
+  uint8_t c;
+  static uint8_t state = IDLE;
+  if (LCD.available())
+  {
+    c = LCD.read();
+    switch (state)
+    {
+      case IDLE :
+
+      break;
+    }
+  }
 }
 
 void sendCommand(const char* cmd)
